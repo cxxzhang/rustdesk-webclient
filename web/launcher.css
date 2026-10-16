@@ -1,0 +1,119 @@
+/* Launcher (sign-in + device list). Reuses the client's palette variables so the
+   two pages read as one product; --rd-accent etc. are set by boot.js. */
+
+:root {
+  --ad-bg: #0b0e14;
+  --ad-surface: #141a24;
+  --ad-surface-2: #1d2532;
+  --ad-border: #2a3444;
+  --ad-fg: #e7ebf3;
+  --ad-muted: #8d97aa;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--ad-bg);
+  color: var(--ad-fg);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+.ad-head { padding: 22px 28px; }
+.ad-brand { display: flex; align-items: center; gap: 10px; }
+.ad-logo { width: 34px; height: 34px; border-radius: 8px; }
+.ad-wordmark { font-size: 20px; font-weight: 700; letter-spacing: -.2px; }
+.ad-wordmark span { color: var(--rd-accent); }
+
+.ad-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px 60px;
+}
+
+.ad-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--ad-surface);
+  border: 1px solid var(--ad-border);
+  border-radius: 14px;
+  padding: 28px;
+}
+.ad-card.ad-wide { max-width: 640px; }
+
+.ad-h1 { margin: 0 0 6px; font-size: 22px; }
+.ad-sub { margin: 0 0 20px; color: var(--ad-muted); font-size: 14px; }
+
+.ad-form { display: flex; flex-direction: column; gap: 12px; }
+
+.ad-input {
+  width: 100%;
+  padding: 11px 13px;
+  background: var(--ad-surface-2);
+  border: 1px solid var(--ad-border);
+  border-radius: 9px;
+  color: var(--ad-fg);
+  font-size: 15px;
+  outline: none;
+}
+.ad-input:focus { border-color: var(--rd-accent); }
+
+.ad-btn {
+  padding: 11px 15px;
+  background: var(--rd-accent);
+  color: var(--rd-accent-fg);
+  border: 0;
+  border-radius: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ad-btn:hover { background: var(--rd-accent-2); }
+.ad-btn:disabled { opacity: .6; cursor: default; }
+
+.ad-err { color: var(--rd-danger, #ff5d5d); font-size: 13px; min-height: 18px; }
+.ad-loading, .ad-empty { color: var(--ad-muted); font-size: 14px; }
+
+.ad-row { display: flex; align-items: center; justify-content: space-between; }
+.ad-link {
+  background: none; border: 0; padding: 0;
+  color: var(--ad-muted); font-size: 13px; cursor: pointer; text-decoration: underline;
+}
+.ad-link:hover { color: var(--ad-fg); }
+
+.ad-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+
+.ad-dev {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--ad-surface-2);
+  border: 1px solid var(--ad-border);
+  border-radius: 10px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ad-dev:hover { border-color: var(--rd-accent); }
+
+.ad-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #55606f; flex: none;
+}
+.ad-dot.on { background: var(--rd-ok, #38c98e); }
+
+.ad-dev-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ad-dev-main strong { font-weight: 600; }
+.ad-dev-main small {
+  color: var(--ad-muted); font-size: 12px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ad-id { color: var(--ad-muted); font-size: 12px; font-variant-numeric: tabular-nums; }

@@ -1,0 +1,21 @@
+version: v2
+# Generates src/gen/message.ts + src/gen/rendezvous.ts from protos/*.proto.
+# Run: npm run gen   (buf bundles its own protoc; no system protoc needed).
+# The ts-proto plugin is invoked as `node <bin>` rather than through
+# node_modules/.bin/protoc-gen-ts_proto: on Windows that shim has no extension
+# and buf spawns it directly, which fails with "'.' is not recognized".
+clean: true
+plugins:
+  - local: ["node", "./node_modules/ts-proto/protoc-gen-ts_proto"]
+    out: src/gen
+    opt:
+      # Load-bearing (spec §5): snakeToCamel=false keeps oneof field names as
+      # the wire names (msg.video_frame?.vp9s) exactly like the AGPL v1 client.
+      - snakeToCamel=false
+      - forceLong=bigint
+      - env=browser
+      - outputJsonMethods=false
+      - esModuleInterop=true
+      - useOptionals=messages
+      - oneof=unions
+      - unrecognizedEnum=false

@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+
+# Build output: esbuild -> dist/, buf -> src/gen/ (generated from protos/)
+dist/
+src/gen/
+
+# Go build output for the bundled TURN server
+tools/turnserver/andesk-turn.exe
+tools/turnserver/andesk-turn.exe~
+
+*.log

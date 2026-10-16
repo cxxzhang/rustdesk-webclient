@@ -1,0 +1,12 @@
+# Normalize line endings so a diff shows content, not CRLF churn.
+# Without this git rewrites LF to CRLF on checkout and every file looks changed.
+* text=auto eol=lf
+
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.dll binary
+*.lib binary
+*.exe binary

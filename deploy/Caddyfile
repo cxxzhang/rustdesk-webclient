@@ -1,0 +1,75 @@
+# AnDesk web client — production edge.
+#
+#   caddy run --config deploy/Caddyfile
+#
+# Caddy terminates TLS and serves two jobs from one origin:
+#   1. the built client (./dist)
+#   2. the two WebSocket endpoints rustdesk uses, path-routed per
+#      libs/hbb_common/src/websocket.rs:421:
+#          /ws/id    -> hbbs websocket port (21118 = rendezvous 21116 + 2)
+#          /ws/relay -> hbbr websocket port (21119 = relay 21117 + 2)
+#
+# Real TLS is not optional in production: an https page cannot open ws://, and
+# WebCodecs (hardware video) only exists in a secure context. Caddy gets a
+# Let's Encrypt certificate automatically for a public name.
+#
+# Then point the client at it — web/config.js or a query string:
+#   wsIdUrl:    'wss://rd.example.com/ws/id'
+#   wsRelayUrl: 'wss://rd.example.com/ws/relay'
+
+rd.example.com {
+	encode zstd gzip
+
+	# hbbr trusts X-Real-IP / X-Forwarded-For so the real client IP survives the
+	# hop (relay_server.rs). Caddy sets X-Forwarded-For automatically; the extra
+	# header makes hbbr prefer it. Never expose 21118/21119 directly — those
+	# headers are unvalidated there.
+	handle /ws/id* {
+		header_up X-Real-IP {remote_host}
+		reverse_proxy 127.0.0.1:21118
+	}
+	handle /ws/relay* {
+		header_up X-Real-IP {remote_host}
+		reverse_proxy 127.0.0.1:21119
+	}
+
+	# Console API (sign-in, device list) for the launcher. Same origin, so the
+	# browser never makes a cross-origin request — the API server sends no CORS
+	# headers and would be blocked otherwise.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:12345
+	}
+
+	# ICE config, with a short-lived TURN credential minted per request. It
+	# lives on the TURN process (the only one holding the shared secret): a
+	# file_server would 404 here, and putting the secret in dist/ would publish
+	# it. Start the TURN server with `-ice-http 127.0.0.1:3479` to serve this.
+	handle /ice-servers.json {
+		reverse_proxy 127.0.0.1:3479
+	}
+
+	# Everything else: the client is a static tree, no server-side rendering.
+	handle {
+		root * /srv/andesk-webclient/dist
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/andesk-access.log
+	}
+}
+
+# Local smoke test without a certificate: Caddy's internal CA.
+# Browsers will warn until its root is trusted (`caddy trust`), and only
+# http://localhost is exempt — which is what `npm run serve` is for.
+:8443 {
+	tls internal
+	handle /ws/id* { reverse_proxy 127.0.0.1:21118 }
+	handle /ws/relay* { reverse_proxy 127.0.0.1:21119 }
+	handle /api/* { reverse_proxy 127.0.0.1:12345 }
+	handle /ice-servers.json { reverse_proxy 127.0.0.1:3479 }
+	handle {
+		root * /srv/andesk-webclient/dist
+		file_server
+	}
+}

@@ -1,0 +1,36 @@
+{
+  "name": "andesk-webclient",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser RustDesk client (wire protocol in TypeScript; relay over WebSocket, WebCodecs video). AGPL-3.0.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "gen": "buf generate",
+    "build": "node esbuild.mjs",
+    "build:dev": "node esbuild.mjs --dev",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "serve": "node scripts/server.mjs"
+  },
+  "dependencies": {
+    "jmuxer": "^2.1.1",
+    "libsodium-wrappers": "^0.7.15",
+    "tweetnacl": "^1.0.3",
+    "zstddec": "^0.1.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.50.0",
+    "@types/libsodium-wrappers": "^0.7.14",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.5.13",
+    "esbuild": "^0.28.2",
+    "ts-proto": "^2.6.0",
+    "tsx": "^4.23.1",
+    "typescript": "^5.7.0",
+    "ws": "^8.18.0"
+  }
+}

@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AnDesk Web</title>
+<link rel="stylesheet" href="./app.css">
+<!-- Optional local overrides: define window.__RD_CONFIG before the bootstrap.
+     boot.js builds window.__RD__ (see src/ui/app.ts for the contract):
+       { peerId?, serverKeyB64, wsIdUrl, wsRelayUrl, apiBase, myId, myName, ... }
+     Everything can be overridden per link, e.g.
+       ?peer=521450463&key=<server pubkey>&wsid=wss://rd.example.com/ws/id -->
+<script src="./config.js"></script>
+<script src="./boot.js"></script>
+</head>
+<body>
+<div id="rd-root"></div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>

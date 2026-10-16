@@ -1,0 +1,17 @@
+{
+  // tsconfig used ONLY by the Node harness (drive-session.mjs), selected with
+  //   TSX_TSCONFIG_PATH=scripts/tsconfig.harness.json node --import tsx ...
+  //
+  // libsodium-wrappers' ESM build (dist/modules-esm/libsodium-wrappers.mjs)
+  // imports a sibling './libsodium.mjs' that the package does not ship, so ESM
+  // resolution dies with ERR_MODULE_NOT_FOUND. The browser build never hits
+  // this because esbuild.mjs aliases the package to its CJS entry; here we do
+  // the same via tsconfig paths, which tsx honours.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "..",
+    "paths": {
+      "libsodium-wrappers": ["node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js"]
+    }
+  }
+}
