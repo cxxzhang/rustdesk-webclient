@@ -16,6 +16,7 @@
 // package isn't required just to bridge.
 
 import { createServer, request as httpRequest } from 'node:http';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { connect } from 'node:net';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
@@ -42,6 +43,71 @@ const root = resolve(fileURLToPath(new URL('../dist', import.meta.url)));
 // signer of its own — so both this dev bridge and the Caddyfile proxy to it.
 // Unset means "no TURN", and the page falls back to config.js / public STUN.
 const ICE_TARGET = arg('ice', process.env.TURN_ICE ?? '');
+
+// ---------------------------------------------------------------------------
+// Share links.
+//
+// A share link is `/s/<payload>.<sig>`: the payload names a peer and carries an
+// expiry, and the signature is HMAC-SHA256 over the payload. Verification is
+// server-side because that is the only place a secret can live — anything the
+// page can compute, the visitor can compute too.
+//
+// The two things this is for:
+//   * the visitor gets in without being told the device id (it is in the link);
+//   * the link stops working on its own, so a link pasted into a chat does not
+//     stay a permanent key to that machine.
+//
+// The RustDesk password is deliberately NOT in the link. It is a credential for
+// the controlled machine and would still work after the link expired, so
+// putting it in a URL that ends up in browser history and chat logs would
+// outlive the expiry it was meant to be bounded by.
+// Default lifetime; a caller may ask for less with ?ttl=.
+const SHARE_TTL_S = Number(arg('share-ttl', process.env.SHARE_TTL ?? '600'));
+const SHARE_TTL_MAX_S = Number(arg('share-ttl-max', process.env.SHARE_TTL_MAX ?? '86400'));
+
+// A secret is required: without one the signature would be forgeable, and a
+// forgeable share link is just an unlocked door. Generated per process for
+// local use, so links made here die with the server — the honest behaviour for
+// a dev bridge. The log prints it so they can still be minted within a run.
+const SHARE_SECRET = (() => {
+  const configured = arg('share-secret', process.env.SHARE_SECRET ?? '');
+  if (configured) return configured;
+  const ephemeral = randomBytes(32).toString('base64url');
+  console.log('[share] no SHARE_SECRET set; using an ephemeral one for this run:');
+  console.log(`[share]   ${ephemeral}`);
+  console.log('[share] set SHARE_SECRET to keep links valid across restarts.');
+  return ephemeral;
+})();
+
+function signShare(payload) {
+  const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const sig = createHmac('sha256', SHARE_SECRET).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+/** Verify a `/s/` token. Returns `{ payload }` or `{ error }`. */
+function verifyShare(token) {
+  const dot = token.lastIndexOf('.');
+  if (dot <= 0) return { error: 'malformed link' };
+  const body = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const want = createHmac('sha256', SHARE_SECRET).update(body).digest('base64url');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(want);
+  // Length check first: timingSafeEqual throws on a length mismatch, and the
+  // length is not secret.
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return { error: 'bad signature' };
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    return { error: 'malformed payload' };
+  }
+  if (typeof payload.exp !== 'number' || Date.now() / 1000 > payload.exp) {
+    return { error: 'link expired' };
+  }
+  return { payload };
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -120,6 +186,78 @@ const server = createServer(async (req, res) => {
       res.end('ice config proxy: ' + e.message);
     });
     up.end();
+    return;
+  }
+
+  // Mint a share link. Not behind auth here because the dev bridge has no user
+  // concept; a real deployment puts this behind the console's session, which is
+  // where "may this user share this device" belongs.
+  //
+  //   /share?peer=521450463[&ttl=300]
+  //   -> { url: "http://host/s/<token>", expires: <unix seconds> }
+  if (pathname === '/share') {
+    const peer = (url.searchParams.get('peer') ?? '').replace(/\s+/g, '');
+    if (!peer) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end('{"error":"peer is required"}');
+      return;
+    }
+    let ttl = Number(url.searchParams.get('ttl') ?? SHARE_TTL_S);
+    if (!Number.isFinite(ttl) || ttl <= 0) ttl = SHARE_TTL_S;
+    ttl = Math.min(ttl, SHARE_TTL_MAX_S);
+    const exp = Math.floor(Date.now() / 1000) + ttl;
+    const token = signShare({ peer, exp });
+    // The Host header, so the link works from wherever the caller reached us.
+    const host = req.headers.host || `localhost:${PORT}`;
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ url: `http://${host}/s/${token}`, peer, expires: exp, ttl }));
+    return;
+  }
+
+  // A share link: verify, then serve the client with the peer and key injected
+  // so the visitor is not asked for a device id. An invalid or expired token
+  // gets an explanatory page, not the client.
+  if (pathname.startsWith('/s/')) {
+    const { payload, error } = verifyShare(pathname.slice(3));
+    if (error) {
+      res.writeHead(error === 'link expired' ? 410 : 403, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store',
+      });
+      res.end(
+        '<!doctype html><meta charset="utf-8">' +
+        '<title>AnDesk</title>' +
+        '<body style="font:16px system-ui;padding:2rem;color:#333">' +
+        `<h1 style="font-size:1.1rem">This link is no longer usable</h1>` +
+        `<p>${error}.</p>` +
+        '<p>Ask whoever sent it for a fresh one.</p>',
+      );
+      return;
+    }
+    // Serve the normal client shell, with one script injected ahead of config.js
+    // that pins the peer. Doing it here rather than in boot.js keeps the shared
+    // secret out of the static tree entirely.
+    const shell = resolve(root, 'index.html');
+    let html;
+    try {
+      html = (await readFile(shell)).toString('utf8');
+    } catch {
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('index.html missing from dist/');
+      return;
+    }
+    const injected = `<script>window.__RD_SHARE=${JSON.stringify({
+      peerId: payload.peer,
+      serverKeyB64: payload.key || undefined,
+    })};</script>`;
+    // Every asset URL in the shell is relative (./app.js, ./app.css), and this
+    // page is served from /s/<token>, so without a <base> they would all resolve
+    // under /s/ and 404. It has to precede the stylesheet link in <head>.
+    html = html.replace('<head>', '<head>\n<base href="/">');
+    html = html.replace('<script src="./config.js"></script>',
+      injected + '\n<script src="./config.js"></script>');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    res.end(html);
     return;
   }
 

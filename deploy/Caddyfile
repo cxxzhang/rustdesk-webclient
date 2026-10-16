@@ -48,6 +48,19 @@ rd.example.com {
 		reverse_proxy 127.0.0.1:3479
 	}
 
+	# Share links. Both need the signing secret, so they cannot come from a
+	# file_server: /share mints a token and /s/* verifies one and injects the
+	# device into the page. They are served by the node bridge, which must run
+	# with SHARE_SECRET set to the same value across restarts (otherwise every
+	# link dies with the process). Put /share behind the console's session auth
+	# in a real deployment — who may share which device is a console decision.
+	handle /share {
+		reverse_proxy 127.0.0.1:8080
+	}
+	handle /s/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
 	# Everything else: the client is a static tree, no server-side rendering.
 	handle {
 		root * /srv/andesk-webclient/dist

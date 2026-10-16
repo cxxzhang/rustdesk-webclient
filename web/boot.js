@@ -12,8 +12,13 @@
     return v === null || v === '' ? fallback : v;
   };
   var brand = base.brand || {};
+  // A share link is served by the bridge with its peer pinned just above us
+  // (see /s/ in scripts/server.mjs). The signature was verified server-side,
+  // which is the only place a secret can live, so this simply trusts what was
+  // injected. Absent on every other page.
+  var share = window.__RD_SHARE || null;
   window.__RD__ = {
-    serverKeyB64: pick('key', base.serverKeyB64 || ''),
+    serverKeyB64: pick('key', (share && share.serverKeyB64) || base.serverKeyB64 || ''),
     wsIdUrl: pick('wsid', base.wsIdUrl || wsOrigin + '/ws/id'),
     wsRelayUrl: pick('wsrelay', base.wsRelayUrl || wsOrigin + '/ws/relay'),
     apiBase: base.apiBase || '/api',
@@ -31,7 +36,7 @@
     myName: pick('myname', base.myName || 'webclient'),
     version: base.version,
     workerUrl: base.workerUrl || './session.worker.js',
-    peerId: pick('peer', base.peerId),
+    peerId: pick('peer', (share && share.peerId) || base.peerId),
     brand: brand,
   };
 
