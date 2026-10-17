@@ -206,11 +206,43 @@ const server = createServer(async (req, res) => {
     if (!Number.isFinite(ttl) || ttl <= 0) ttl = SHARE_TTL_S;
     ttl = Math.min(ttl, SHARE_TTL_MAX_S);
     const exp = Math.floor(Date.now() / 1000) + ttl;
-    const token = signShare({ peer, exp });
+    // `pw` (opt-in) puts the controlled peer's password inside the signed
+    // payload, so the visitor connects without being told it. Off by default:
+    // it makes the link a full credential, so it is only as safe as the channel
+    // it travels over and the short TTL. `key` pins the server key, which lets
+    // the link work even if the client's config.js is stale.
+    const payload = { peer, exp };
+    const pw = url.searchParams.get('pw');
+    if (pw) payload.pw = pw;
+    const key = url.searchParams.get('key');
+    if (key) payload.key = key;
+    const token = signShare(payload);
     // The Host header, so the link works from wherever the caller reached us.
     const host = req.headers.host || `localhost:${PORT}`;
+    // Behind TLS the link must be https:// or the browser blocks the ws:// it
+    // opens. The edge sets X-Forwarded-Proto; fall back to the request's own
+    // socket encryption (plain http for the dev bridge).
+    const proto = req.headers['x-forwarded-proto'] || (req.socket.encrypted ? 'https' : 'http');
+    // Opened directly in a browser (the controlled peer's "copy share link"
+    // button hands out exactly this URL), redirect to the signed link instead
+    // of showing JSON. A programmatic caller sends Accept: application/json and
+    // still gets the structured response.
+    const wantsHtml = (req.headers.accept || '').includes('text/html');
+    if (wantsHtml && req.method === 'GET') {
+      res.writeHead(302, {
+        Location: `${proto}://${host}/s/${token}`,
+        'Cache-Control': 'no-store',
+      });
+      res.end();
+      return;
+    }
     res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-    res.end(JSON.stringify({ url: `http://${host}/s/${token}`, peer, expires: exp, ttl }));
+    res.end(JSON.stringify({
+      url: `${proto}://${host}/s/${token}`,
+      peer, expires: exp, ttl,
+      // Never echo the password back; say only that one is embedded.
+      includesPassword: Boolean(pw),
+    }));
     return;
   }
 
@@ -246,9 +278,15 @@ const server = createServer(async (req, res) => {
       res.end('index.html missing from dist/');
       return;
     }
-    const injected = `<script>window.__RD_SHARE=${JSON.stringify({
+    // The token is scrubbed from the address bar before the client shell runs:
+    // a credential-bearing URL would otherwise sit in history, in a screenshot
+    // of the URL bar, and in whatever the visitor pasted it into. The page is
+    // already loaded, so the path change costs nothing.
+    const scrub = `<script>try{history.replaceState(null,'','/')}catch(e){}</script>`;
+    const injected = scrub + `<script>window.__RD_SHARE=${JSON.stringify({
       peerId: payload.peer,
       serverKeyB64: payload.key || undefined,
+      password: payload.pw || undefined,
     })};</script>`;
     // Every asset URL in the shell is relative (./app.js, ./app.css), and this
     // page is served from /s/<token>, so without a <base> they would all resolve
